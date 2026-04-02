@@ -26,7 +26,7 @@ extern void opteed_cpu_on_handler(uint32_t linear_id);
 static int nuclei_evalsoc_final_init(bool cold_boot,
 				   const struct fdt_match *match)
 {
-	unsigned long smpcc_base = 0, smpcc_cfg;
+	
 	if (!cold_boot) { // Add cold boot initial steps
         /* warm boot to setup optee ctx for secondary cpu */
         unsigned int secondary_hartid;
@@ -36,6 +36,24 @@ static int nuclei_evalsoc_final_init(bool cold_boot,
 
         return 0;
 	}
+
+#if 0
+
+   #define MATTRI0_MASK    0x7F4
+   #define MATTRI0_BASE    0x7F3
+   #define HOST_MAILBOX_BASE_ADDR  (0x8800000UL)
+   #define HOST_MAILBOX_SIZE       (0x4000ULL)
+
+   uint64_t base_val;
+
+  base_val = (HOST_MAILBOX_BASE_ADDR & (~(HOST_MAILBOX_SIZE-1))) | BIT(2) | BIT(0);
+
+ 
+  csr_write(MATTRI0_MASK, ~(HOST_MAILBOX_SIZE-1));
+  csr_write(MATTRI0_BASE, base_val);  
+ 
+#endif   
+
 	sm_init(cold_boot);
 	// Check mcfg_info.tee to see whether tee present
 	if (csr_read(0xfc2) & 0x1) {
@@ -44,9 +62,12 @@ static int nuclei_evalsoc_final_init(bool cold_boot,
 		csr_write(0x1b0, 0xffffffff);
 	}
 
+#if 1
+    unsigned long smpcc_base = 0, smpcc_cfg;
 	// Check mcfg_info.smp to see whether smp present
 	// if present, disable clm and enable l2 cache for boot hart
 	if (csr_read(0xfc2) & (0x1 << 11) && cold_boot) {
+
 		smpcc_base = csr_read(0x7f7) >> 10;
 		smpcc_base = (smpcc_base << 10) + 0x40000;
 		smpcc_cfg = readl((volatile void *)(smpcc_base + 0x4));
@@ -62,7 +83,10 @@ static int nuclei_evalsoc_final_init(bool cold_boot,
 			// set CC_CTRL = 0x1
 			writel(1, (volatile void *)(smpcc_base + 0x10));
 		}
+
 	}
+#endif
+
 
 	return 0;
 }
