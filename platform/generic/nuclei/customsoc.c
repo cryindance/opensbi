@@ -26,6 +26,19 @@ static int nuclei_customsoc_final_init(bool cold_boot,
 	if (cold_boot) { // Add cold boot initial steps
 	}
 
+      /* config host mailbox region to noncachable */
+       #define MATTRI0_MASK    0x7F4
+       #define MATTRI0_BASE    0x7F3
+       #define HOST_MAILBOX_BASE_ADDR  (0x8800000UL)
+       #define HOST_MAILBOX_SIZE       (0x4000ULL)
+
+       uint64_t base_val;
+
+       base_val = (HOST_MAILBOX_BASE_ADDR & (~(HOST_MAILBOX_SIZE-1))) | BIT(2) | BIT(0);
+	   csr_write(MATTRI0_BASE, base_val);
+       csr_write(MATTRI0_MASK, ~(HOST_MAILBOX_SIZE-1));
+       
+
 	// Check mcfg_info.tee to see whether tee present
 	if (csr_read(0xfc2) & 0x1) {
 		// Enable U-Mode to access all regions by setting spmpcfg0 and spmpaddr0
