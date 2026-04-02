@@ -13,11 +13,7 @@
 #include <sbi/sbi_ecall.h>
 #include <opteed_private.h>
 #include <sbi_utils/irqchip/plic.h>
-#include <sbi_utils/fdt/fdt_helper.h>
 
-extern void* irqchip_plic_get_pd(void);
-extern int fdt_node_offset_by_compatible(const void *fdt,
-			int startoffset, const char *compatible);
 extern struct sbi_ecall_extension ecall_optee;
 static int sm_init_done = 0;
 static int sm_region_id = 0, os_region_id = 0;
@@ -27,32 +23,32 @@ int mailbox_region_id = 0;
 
 int osm_pmp_set(uint8_t perm)
 {
-	return pmp_set_permission(os_region_id, perm);
+	return pmp_set_keystone(os_region_id, perm);
 }
 
 int teem_pmp_set(uint8_t perm)
 {
-	return pmp_set_permission(tee_region_id, perm);
+	return pmp_set_keystone(tee_region_id, perm);
 }
 
 int shm_pmp_set(uint8_t perm)
 {
-	return pmp_set_permission(shm_region_id, perm);
+	return pmp_set_keystone(shm_region_id, perm);
 }
 
 int plicm_pmp_set(uint8_t perm)
 {
-	return pmp_set_permission(plicm_region_id, perm);
+	return pmp_set_keystone(plicm_region_id, perm);
 }
 
 int timerm_pmp_set(uint8_t perm)
 {
-	return pmp_set_permission(timer_region_id, perm);
+	return pmp_set_keystone(timer_region_id, perm);
 }
 
 int mailboxm_pmp_set(uint8_t perm)
 {
-	return pmp_set_permission(mailbox_region_id, perm);
+	return pmp_set_keystone(mailbox_region_id, perm);
 }
 
 int smm_init()
@@ -98,6 +94,7 @@ int shm_init()
 	return region;
 }
 
+extern void* irqchip_plic_get_pd(void);
 int plicm_init()
 {
 	int region = -1;
@@ -127,25 +124,9 @@ int timerm_init()
 int mailboxm_init()
 {
 	int region = -1;
-	int nodeoffset, rc;
-	uint64_t reg_addr, reg_size;
-	void *fdt = fdt_get_address();
-
-	nodeoffset = fdt_node_offset_by_compatible(fdt, -1, "nuclei,nuclei-mbox");
-	if (nodeoffset < 0)
-		return -1;
-	rc = fdt_get_node_addr_size(fdt, nodeoffset, 0,
-				    &reg_addr, &reg_size);
-	if (rc < 0 || !reg_addr || !reg_size)
-		return -1;
-
-	if (reg_size & (reg_size -1)) {
-		sbi_printf("mailbox size is not ^2 aligned, please ensure aligned!\n");
-		return -1;
-	}
-	rc = pmp_region_init_atomic((uintptr_t)reg_addr, reg_size,
+	int ret = pmp_region_init_atomic(OPTEE_MAILBOX_BASE, OPTEE_MAILBOX_SIZE,
 					 PMP_PRI_ANY, &region, 0);
-	if (rc)
+	if (ret)
 		return -1;
 
 	return region;
@@ -164,35 +145,35 @@ void sm_init(bool cold_boot)
 		sm_region_id = smm_init();
 		if (sm_region_id < 0) {
 			sbi_printf(
-				"[SM] failed to create secure monitor pmp entry.\n");
+				"[SM] intolerable error - failed to initialize SM memory");
 			sbi_hart_hang();
 		}
 
 		os_region_id = osm_init();
 		if (os_region_id < 0) {
 			sbi_printf(
-				"[SM] failed to create reeos pmp entry.\n");
+				"[SM] intolerable error - failed to initialize OS memory");
 			sbi_hart_hang();
 		}
 
 		tee_region_id = teem_init();
 		if (tee_region_id < 0) {
 			sbi_printf(
-				"[SM] failed to create teeos pmp entry.\n");
+				"[SM] intolerable error - failed to initialize TEE memory");
 			sbi_hart_hang();
 		}
 
 		shm_region_id = shm_init();
 		if (shm_region_id < 0) {
 			sbi_printf(
-				"[SM] failed to create tee_share pmp entry.\n");
+				"[SM] intolerable error - failed to initialize TEE SHARE memory");
 			sbi_hart_hang();
 		}
 
 		plicm_region_id = plicm_init();
 		if (plicm_region_id < 0) {
 			sbi_printf(
-				"[SM] failed to create plic pmp entry.\n");
+				"[SM] intolerable error - failed to initialize PLIC memory");
 			sbi_hart_hang();
 		}
 
@@ -200,16 +181,16 @@ void sm_init(bool cold_boot)
 		timer_region_id = timerm_init();
 		if (timer_region_id < 0) {
 			sbi_printf(
-				"[SM] failed to create test_timer pmp entry.\n");
+				"[SM] intolerable error - failed to initialize SEC Timer memory");
 			sbi_hart_hang();
 		}
 #endif
-		/*
-		 * mailbox pmp is for communication between host and hsm
-		 * only used for nuclei hsm crypto engine.
-		 */
 		mailbox_region_id = mailboxm_init();
-
+		if (mailbox_region_id < 0) {
+			sbi_printf(
+				"[SM] intolerable error - failed to initialize Mailbox memory");
+			sbi_hart_hang();
+		}
 		/* enable optee use CCM cache function */
 		#define CCM_SUEN 0x7CE
 		#define S_WB_ALL_ENABLE  (1 << 25)
@@ -230,9 +211,9 @@ void sm_init(bool cold_boot)
 
 	/* below are executed by all harts */
 	pmp_init();
-	pmp_set_permission(sm_region_id, PMP_NO_PERM);
-	pmp_set_permission(os_region_id, PMP_ALL_PERM);
-	pmp_set_permission(tee_region_id, PMP_NO_PERM);
+	pmp_set_keystone(sm_region_id, PMP_NO_PERM);
+	pmp_set_keystone(os_region_id, PMP_ALL_PERM);
+	pmp_set_keystone(tee_region_id, PMP_NO_PERM);
 
 	if (cold_boot) {
 		opteed_init();

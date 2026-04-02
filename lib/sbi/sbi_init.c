@@ -318,6 +318,8 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 
 	sbi_boot_print_banner(scratch);
 
+    sbi_printf("init_coldboot:hartid %d\n",hartid);
+
 	rc = sbi_irqchip_init(scratch, true);
 	if (rc) {
 		sbi_printf("%s: irqchip init failed (error %d)\n",
@@ -481,11 +483,14 @@ static void __noreturn init_warmboot(struct sbi_scratch *scratch, u32 hartid)
 {
 	int hstate;
 
+
 	wait_for_coldboot(scratch, hartid);
 
 	hstate = sbi_hsm_hart_get_state(sbi_domain_thishart_ptr(), hartid);
 	if (hstate < 0)
 		sbi_hart_hang();
+
+    sbi_printf("init_warmboot:hartid %d\n",hartid);
 
 	if (hstate == SBI_HSM_STATE_SUSPENDED) {
 		init_warm_resume(scratch, hartid);
@@ -515,6 +520,8 @@ void __noreturn sbi_init(struct sbi_scratch *scratch)
 	bool coldboot			= false;
 	u32 hartid			= current_hartid();
 	const struct sbi_platform *plat = sbi_platform_ptr(scratch);
+
+    //printf("current_hartid %d.\n",hartid);
 
 	if ((SBI_HARTMASK_MAX_BITS <= hartid) ||
 	    sbi_platform_hart_invalid(plat, hartid))
