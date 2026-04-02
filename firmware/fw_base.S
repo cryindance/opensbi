@@ -31,6 +31,7 @@
 	add	\__d4, \__s4, zero
 .endm
 
+#define MHARTID_MASK 0x3
 /*
  * If __start_reg <= __check_reg and __check_reg < __end_reg then
  *   jump to __pass
@@ -40,6 +41,12 @@
 	bge	\__check_reg, \__end_reg, 999f
 	j	\__jump_lable
 999:
+.endm
+
+.macro GET_MASKED_HARTID result_reg
+    # Read hartid into result register
+    csrr    \result_reg, mhartid
+    and     \result_reg, \result_reg, HARTID_MASK
 .endm
 
 	.section .entry, "ax", %progbits
@@ -457,9 +464,10 @@ _start_warm:
 
 	/* Find HART id */
 	csrr	s6, CSR_MHARTID
+	andi s6, s6, MHARTID_MASK 
+ //andi    s6, s6, 255
 
-	andi	s6, s6, 0xff
-	/* Find HART index */
+ /* Find HART index */
 	beqz	s9, 3f
 	li	a4, 0
 1:
